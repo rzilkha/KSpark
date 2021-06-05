@@ -1,5 +1,6 @@
 import org.apache.hadoop.hdfs.server.namenode.ListPathsServlet.df
 import org.apache.parquet.example.Paper.schema
+import org.apache.parquet.filter.ColumnRecordFilter.column
 import org.apache.parquet.schema.Types
 import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.api.java.function.MapPartitionsFunction
@@ -12,11 +13,14 @@ import org.apache.spark.sql.types.ArrayType
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
-import org.jetbrains.kotlinx.spark.api.map
-import org.jetbrains.kotlinx.spark.api.mapPartitions
-import org.jetbrains.kotlinx.spark.api.withSpark
+
 import java.io.Serializable
 import java.lang.invoke.SerializedLambda
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.array
+import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.functions.explode
+import org.jetbrains.kotlinx.spark.api.*
 
 
 fun main(args: Array<String>) {
@@ -49,11 +53,9 @@ fun main(args: Array<String>) {
             .add(StructField.apply("distance", DataTypes.StringType, true, null))
             .add(StructField.apply("status", DataTypes.StringType, true, null))
 
-        val runit = object : MapPartitionsFunction<Row?, Row>, java.io.Serializable {
+        val normalizedValueFunction = object : MapPartitionsFunction<Row?, Row>, java.io.Serializable {
 
             override fun call(input: MutableIterator<Row?>?): MutableIterator<Row>? {
-
-
                 var nameToFriend = input?.asSequence()?.groupingBy { it?.getString(0) }
                     ?.aggregateTo(mutableMapOf()) { key, accumulator: MutableList<String?>?, element, first ->
 
@@ -66,15 +68,33 @@ fun main(args: Array<String>) {
                         }
                     }
 
-                    ?.map { RowFactory.create(it.key, it.value?.toTypedArray(),  null ,"NOT_READY") }?.toMutableList()
+                    ?.map {
+                        val status = if(it.key.equals("roee"))  "READY" else "NOT_READY"
+                        RowFactory.create(it.key, it.value?.toTypedArray(),  null ,status) }?.toMutableList()
 
 
                 return nameToFriend?.iterator()
             }
         }
 
-        var rowEncoder: ExpressionEncoder<Row> = RowEncoder.apply(schema)
-        df.mapPartitions(runit, rowEncoder).show()
+        val rowEncoder: ExpressionEncoder<Row> = RowEncoder.apply(schema)
+
+        val data = df.mapPartitions(normalizedValueFunction, rowEncoder)
+
+        val reduced =
+            data.select(explode(col("connections")).`as`("name"), lit(array()).`as`("connections"), lit(1).`as`("distance"), lit("NOT_READY").`as`("status"))
+                .where(expr("name='roee'"))
+
+
+        data.union(reduced).show()
+
+
+
+
+
+
+
+
     }
 
 

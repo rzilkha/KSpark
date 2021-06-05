@@ -9,6 +9,7 @@ fun main(args: Array<String>) {
     var df = session.read().format("csv")
             .option("header",true).
                     load("C:\\KotlinSpark\\src\\main\\resources\\csv_example.csv").toDF()
-    df.select(col("firstName"), col("lastName"),expr("age-1").alias("ageminus10")).show()
-    println("hi")
+    df.select(col("firstName"), col("lastName"))
+        .where(col("firstName").equalTo("roee")).show()
+
 }
