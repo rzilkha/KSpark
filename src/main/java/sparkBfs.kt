@@ -44,8 +44,10 @@ fun main(args: Array<String>) {
             .option("header", true)
             .load("C:\\KotlinSpark\\src\\main\\resources\\connections.csv").toDF()
         val schema: StructType? = StructType()
-            .add(StructField.apply("id", DataTypes.StringType, true, null))
-            .add(StructField.apply("id2", ArrayType.apply(DataTypes.StringType), true, null))
+            .add(StructField.apply("name", DataTypes.StringType, true, null))
+            .add(StructField.apply("connections", ArrayType.apply(DataTypes.StringType), true, null))
+            .add(StructField.apply("distance", DataTypes.StringType, true, null))
+            .add(StructField.apply("status", DataTypes.StringType, true, null))
 
         val runit = object : MapPartitionsFunction<Row?, Row>, java.io.Serializable {
 
@@ -64,7 +66,7 @@ fun main(args: Array<String>) {
                         }
                     }
 
-                    ?.map { RowFactory.create(it.key, it.value) }?.toMutableList()
+                    ?.map { RowFactory.create(it.key, it.value?.toTypedArray(),  null ,"NOT_READY") }?.toMutableList()
 
 
                 return nameToFriend?.iterator()
