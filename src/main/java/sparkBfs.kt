@@ -1,3 +1,4 @@
+
 import org.apache.hadoop.hdfs.server.namenode.ListPathsServlet.df
 import org.apache.parquet.example.Paper.schema
 import org.apache.parquet.filter.ColumnRecordFilter.column
@@ -9,18 +10,23 @@ import org.apache.spark.sql.RowFactory
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.functions.*
+
+import org.apache.spark.sql.functions.arrays_zip
+
+import org.apache.spark.sql.functions.flatten
+
+
 import org.apache.spark.sql.types.ArrayType
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
+import org.jetbrains.kotlinx.spark.api.withSpark
 
 import java.io.Serializable
 import java.lang.invoke.SerializedLambda
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.functions.array
-import org.apache.spark.sql.functions.expr
-import org.apache.spark.sql.functions.explode
-import org.jetbrains.kotlinx.spark.api.*
+
+
 
 
 fun main(args: Array<String>) {
@@ -82,18 +88,22 @@ fun main(args: Array<String>) {
         val data = df.mapPartitions(normalizedValueFunction, rowEncoder)
 
         val reduced =
-            data.select(explode(col("connections")).`as`("name"), lit(array()).`as`("connections"), lit(1).`as`("distance"), lit("NOT_READY").`as`("status"))
-                .where(expr("name='roee'"))
+            data.where(col("status").equalTo("READY"))
+                .select(explode(col("connections")).`as`("name"),
+                                  lit(array()).`as`("connections"), lit(1).`as`("distance"),
+                          lit("READY").`as`("status"))
 
 
-        data.union(reduced).show()
+        val convertToDone = data.select(
+            col("name"), col("connections"), col("distance"),
+            `when`(col("status").equalTo("READY"), "DONE").otherwise(col("status")).`as`("status")
+        )
 
 
+         val unionWithConnections = convertToDone.union(reduced)
 
-
-
-
-
+        unionWithConnections.select("name","distance","connections").groupBy(col("name"))
+            .agg(min(col("distance")), flatten(collect_list(col("connections")))).show()
 
     }
 
