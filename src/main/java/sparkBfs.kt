@@ -72,6 +72,8 @@ fun main(args: Array<String>) {
 
 
         for (i in 1..4) {
+
+            // set all rows that are with status ready to contain the distance
             val reduced =
                 data.where(col("status").equalTo(1))
                     .select(
@@ -81,6 +83,7 @@ fun main(args: Array<String>) {
                     )
 
 
+            // change all that was ready to done( status=2)
             val convertToDone = data.select(
                 col("name"), col("connections"), col("distance"),
                 `when`(col("status").equalTo(1), 2).otherwise(col("status")).`as`("status")
@@ -90,6 +93,7 @@ fun main(args: Array<String>) {
             val unionWithConnections = convertToDone.union(reduced)
 
 
+            //  group all ready rows with other rows, grouped by name
             data = unionWithConnections.select("*").groupBy(col("name"))
                 .agg(
                     min(col("distance")).`as`("distance"), flatten(collect_list(col("connections"))).`as`("connections"),
