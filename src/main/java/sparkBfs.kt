@@ -31,24 +31,6 @@ import java.lang.invoke.SerializedLambda
 
 fun main(args: Array<String>) {
 
-    class Something: Serializable, MapFunction<Row, Row> {
-        override fun call(value: Row?): Row {
-            TODO("Not yet implemented")
-        }
-
-    }
-
-    val numbers = listOf(3, 4, 5, 6, 7, 8, 9)
-
-    val aggregated = numbers.groupingBy { it % 3 }.aggregateTo(mutableMapOf()) { key, accumulator: StringBuilder?, element, first ->
-        if (first) // first element
-            StringBuilder().append(key).append(":").append(element)
-        else
-            accumulator!!.append("-").append(element)
-    }
-
-
-
     withSpark {
         val df = spark.read().format("csv")
             .option("header", true)
@@ -57,7 +39,7 @@ fun main(args: Array<String>) {
             .add(StructField.apply("name", DataTypes.StringType, true, null))
             .add(StructField.apply("connections", ArrayType.apply(DataTypes.StringType), true, null))
             .add(StructField.apply("distance", DataTypes.StringType, true, null))
-            .add(StructField.apply("status", DataTypes.StringType, true, null))
+            .add(StructField.apply("status", DataTypes.IntegerType, true, null))
 
         val normalizedValueFunction = object : MapPartitionsFunction<Row?, Row>, java.io.Serializable {
 
@@ -75,7 +57,7 @@ fun main(args: Array<String>) {
                     }
 
                     ?.map {
-                        val status = if(it.key.equals("roee"))  "READY" else "NOT_READY"
+                        val status = if(it.key.equals("roee"))  1 else 0
                         RowFactory.create(it.key, it.value?.toTypedArray(),  null ,status) }?.toMutableList()
 
 
@@ -85,25 +67,36 @@ fun main(args: Array<String>) {
 
         val rowEncoder: ExpressionEncoder<Row> = RowEncoder.apply(schema)
 
-        val data = df.mapPartitions(normalizedValueFunction, rowEncoder)
 
-        val reduced =
-            data.where(col("status").equalTo("READY"))
-                .select(explode(col("connections")).`as`("name"),
-                                  lit(array()).`as`("connections"), lit(1).`as`("distance"),
-                          lit("READY").`as`("status"))
+        var data = df.mapPartitions(normalizedValueFunction, rowEncoder)
 
 
-        val convertToDone = data.select(
-            col("name"), col("connections"), col("distance"),
-            `when`(col("status").equalTo("READY"), "DONE").otherwise(col("status")).`as`("status")
-        )
+        for (i in 1..4) {
+            val reduced =
+                data.where(col("status").equalTo(1))
+                    .select(
+                        explode(col("connections")).`as`("name"),
+                        lit(array()).`as`("connections"), lit(i).`as`("distance"),
+                        lit(1).`as`("status")
+                    )
 
 
-         val unionWithConnections = convertToDone.union(reduced)
+            val convertToDone = data.select(
+                col("name"), col("connections"), col("distance"),
+                `when`(col("status").equalTo(1), 2).otherwise(col("status")).`as`("status")
+            )
 
-        unionWithConnections.select("name","distance","connections").groupBy(col("name"))
-            .agg(min(col("distance")), flatten(collect_list(col("connections")))).show()
+
+            val unionWithConnections = convertToDone.union(reduced)
+
+
+            data = unionWithConnections.select("*").groupBy(col("name"))
+                .agg(
+                    min(col("distance")).`as`("distance"), flatten(collect_list(col("connections"))).`as`("connections"),
+                    max(col("status")).`as`("status")
+                )
+            data.show()
+        }
 
     }
 
