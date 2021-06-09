@@ -21,6 +21,7 @@ import org.apache.spark.sql.types.ArrayType
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
+import org.jetbrains.kotlinx.spark.api.eq
 import org.jetbrains.kotlinx.spark.api.withSpark
 
 import java.io.Serializable
@@ -47,18 +48,19 @@ fun main(args: Array<String>) {
                 var nameToFriend = input?.asSequence()?.groupingBy { it?.getString(0) }
                     ?.aggregateTo(mutableMapOf()) { key, accumulator: MutableList<String?>?, element, first ->
 
-                        val friend :String? = element?.getString(1)
-                        if(first){
+                        val friend: String? = element?.getString(1)
+                        if (first) {
                             mutableListOf(friend)
-                        }else{
+                        } else {
                             accumulator?.add(friend)
                             accumulator
                         }
                     }
 
                     ?.map {
-                        val status = if(it.key.equals("roee"))  1 else 0
-                        RowFactory.create(it.key, it.value?.toTypedArray(),  null ,status) }?.toMutableList()
+                        val status = if (it.key.equals("roee")) 1 else 0
+                        RowFactory.create(it.key, it.value?.toTypedArray(), null, status)
+                    }?.toMutableList()
 
 
                 return nameToFriend?.iterator()
@@ -67,9 +69,12 @@ fun main(args: Array<String>) {
 
         val rowEncoder: ExpressionEncoder<Row> = RowEncoder.apply(schema)
 
-
-        var data = df.mapPartitions(normalizedValueFunction, rowEncoder)
-
+        //df.mapPartitions(normalizedValueFunction, rowEncoder)
+        var data = df.select(col("name"), col("friend"))
+            .groupBy(col("name"))
+            .agg(collect_list(col("friend")).`as`("connections"))
+            .withColumn("status", `when`(col("name").equalTo("roee"), 1).otherwise(0).`as`("status"))
+            .withColumn("distance", lit(null))
 
         for (i in 1..4) {
 
@@ -96,17 +101,14 @@ fun main(args: Array<String>) {
             //  group all ready rows with other rows, grouped by name
             data = unionWithConnections.select("*").groupBy(col("name"))
                 .agg(
-                    min(col("distance")).`as`("distance"), flatten(collect_list(col("connections"))).`as`("connections"),
+                    min(col("distance")).`as`("distance"),
+                    flatten(collect_list(col("connections"))).`as`("connections"),
                     max(col("status")).`as`("status")
                 )
             data.show()
+//        }
+
         }
-
     }
-
-
-
-
-   
 }
 
