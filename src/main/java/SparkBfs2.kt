@@ -28,6 +28,7 @@ val READY = 1
 
 fun explodeConnections(iteration: Int): (Row) -> Iterator<Row> {
     return {
+        val name = it.getString(0)
         val connections = it.getList<String>(1)
         val distance = it.get(2)
         val status = it.getInt(3)
@@ -36,7 +37,7 @@ fun explodeConnections(iteration: Int): (Row) -> Iterator<Row> {
             for (connection in connections) {
                 normalized.add(RowFactory.create(connection, arrayOf<String>(), iteration, READY))
             }
-            normalized.add(RowFactory.create(it.getString(0), connections.toTypedArray(), distance, DONE))
+            normalized.add(RowFactory.create(name, connections.toTypedArray(), distance, DONE))
         } else {
             normalized.add(it)
         }
@@ -48,8 +49,7 @@ fun main(args: Array<String>) {
 
     val fileName = args[0]
     val source = args[1]
-
-    val sparkSession = SparkSession.builder().appName("try").master("local[*]")
+    val sparkSession = SparkSession.builder().appName("BFS").master("local[*]")
         .orCreate
     val dataframe = sparkSession.read()
         .option("header", true)
@@ -79,7 +79,7 @@ fun main(args: Array<String>) {
 
 
 
-    for (i in 1..10) {
+    for (i in 1..3) {
 //
 
         data = data.flatMap(explodeConnections(i), rowEncoder)
